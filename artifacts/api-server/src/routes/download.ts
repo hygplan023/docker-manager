@@ -64,7 +64,7 @@ function buildZip(): void {
   const chunks: Buffer[] = [];
   const centralDirs: Array<{
     nameBytes: Buffer; crc: number; compSize: number;
-    uncompSize: number; offset: number; useDeflate: boolean;
+    uncompSize: number; offset: number; useDeflate: boolean; unixMode: number;
   }> = [];
   let offset = 0;
 
@@ -93,7 +93,8 @@ function buildZip(): void {
     localHeader.writeUInt16LE(0, 28);
     nameBytes.copy(localHeader, 30);
 
-    centralDirs.push({ nameBytes, crc, compSize: fileData.length, uncompSize: data.length, offset, useDeflate });
+    const unixMode = 0o100000 | (rel.endsWith(".sh") ? 0o755 : 0o644);
+    centralDirs.push({ nameBytes, crc, compSize: fileData.length, uncompSize: data.length, offset, useDeflate, unixMode });
     chunks.push(localHeader, fileData);
     offset += localHeader.length + fileData.length;
   }
@@ -102,7 +103,7 @@ function buildZip(): void {
   for (const e of centralDirs) {
     const cd = Buffer.alloc(46 + e.nameBytes.length);
     cd.writeUInt32LE(0x02014b50, 0);
-    cd.writeUInt16LE(20, 4);
+    cd.writeUInt16LE((3 << 8) | 20, 4);
     cd.writeUInt16LE(20, 6);
     cd.writeUInt16LE(0, 8);
     cd.writeUInt16LE(e.useDeflate ? 8 : 0, 10);
@@ -116,7 +117,7 @@ function buildZip(): void {
     cd.writeUInt16LE(0, 32);
     cd.writeUInt16LE(0, 34);
     cd.writeUInt16LE(0, 36);
-    cd.writeUInt32LE(0, 38);
+    cd.writeUInt32LE((e.unixMode << 16) >>> 0, 38);
     cd.writeUInt32LE(e.offset, 42);
     e.nameBytes.copy(cd, 46);
     chunks.push(cd);
