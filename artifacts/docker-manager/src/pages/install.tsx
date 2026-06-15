@@ -89,10 +89,18 @@ export default function Install() {
     }
   };
 
+  // GitHub 永久下载链接（永不过期）
+  const PERMANENT_DOWNLOAD_URL = "https://github.com/hygplan023/docker-manager/raw/main/dist-package.zip";
+
   const handleDownload = () => {
     // 直接跳转让浏览器原生下载，避免 fetch+blob 将 100MB+ 加载进 JS 内存导致超时
     window.location.href = "/api/download/package";
     toast({ title: "⏳ 正在打包下载...", description: "浏览器将自动下载 docker-manager.zip，大文件请耐心等待" });
+  };
+
+  const handlePermanentDownload = () => {
+    window.open(PERMANENT_DOWNLOAD_URL, "_blank");
+    toast({ title: "⬇️ 正在下载...", description: "永久链接已打开，浏览器将下载 dist-package.zip" });
   };
 
   return (
@@ -117,7 +125,12 @@ export default function Install() {
                 className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm h-9">
                 <><Download className="w-4 h-4 mr-2" />下载 docker-manager.zip</>
               </Button>
+              <Button onClick={handlePermanentDownload} variant="outline"
+                className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 text-sm h-9">
+                <><Download className="w-4 h-4 mr-2" />永久链接下载（永不过期）</>
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground">永久链接：<a href={PERMANENT_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline break-all">GitHub dist-package.zip</a></p>
             <p className="text-xs text-muted-foreground">解压后：Windows → 双击 <code className="text-cyan-300">start-windows.bat</code>，macOS/Linux → 运行 <code className="text-cyan-300">./start-mac.sh</code></p>
           </CardContent>
         </Card>
