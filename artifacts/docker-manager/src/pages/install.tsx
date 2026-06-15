@@ -64,7 +64,6 @@ export default function Install() {
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<CodexCheckResult | null>(null);
-  const [downloading, setDownloading] = useState(false);
   const { toast } = useToast();
 
   const copy = async (text: string) => {
@@ -114,9 +113,9 @@ export default function Install() {
             </div>
             <p className="text-xs text-muted-foreground">打包完整项目代码（含启动脚本），解压后一键运行</p>
             <div className="flex gap-2 flex-wrap">
-              <Button onClick={handleDownload} disabled={downloading}
+              <Button onClick={handleDownload}
                 className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm h-9">
-                {downloading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />打包中...</> : <><Download className="w-4 h-4 mr-2" />下载 docker-manager.zip</>}
+                <><Download className="w-4 h-4 mr-2" />下载 docker-manager.zip</>
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">解压后：Windows → 双击 <code className="text-cyan-300">start-windows.bat</code>，macOS/Linux → 运行 <code className="text-cyan-300">./start-mac.sh</code></p>
