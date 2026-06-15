@@ -76,6 +76,17 @@ function buildZip(): void {
     if (rel.endsWith(".bat")) {
       data = Buffer.from(data.toString("latin1").replace(/\r?\n/g, "\r\n"), "latin1");
     }
+    if (rel === "package.json") {
+      try {
+        const pkg = JSON.parse(data.toString("utf8"));
+        if (pkg?.scripts?.preinstall) {
+          delete pkg.scripts.preinstall;
+          data = Buffer.from(JSON.stringify(pkg, null, 2) + "\n", "utf8");
+        }
+      } catch {
+        // leave package.json untouched if it cannot be parsed
+      }
+    }
     const nameBytes = Buffer.from(rel, "utf8");
     const compressed = deflateRawSync(data, { level: 6 });
     const useDeflate = compressed.length < data.length;
