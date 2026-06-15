@@ -73,6 +73,9 @@ function buildZip(): void {
     try { data = readFileSync(full); } catch { continue; }
 
     const rel = relative(ROOT, full).replace(/\\/g, "/");
+    if (rel.endsWith(".bat")) {
+      data = Buffer.from(data.toString("latin1").replace(/\r?\n/g, "\r\n"), "latin1");
+    }
     const nameBytes = Buffer.from(rel, "utf8");
     const compressed = deflateRawSync(data, { level: 6 });
     const useDeflate = compressed.length < data.length;
