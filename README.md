@@ -20,7 +20,9 @@
 
 👉 https://github.com/hygplan023/docker-manager/raw/main/dist-package.zip
 
-点击即可直接下载离线安装包 `dist-package.zip`（约 35 MB）。该链接指向仓库内文件，永久有效、不会过期。
+点击即可直接下载离线安装包 `dist-package.zip`（约 500 KB，仅含源码与启动脚本）。该链接指向仓库内文件，永久有效、不会过期。
+
+> 安装包不含 `node_modules`，首次运行启动脚本时会自动执行 `pnpm install` 联网安装依赖，请保持网络畅通并耐心等待。
 
 ## 本地部署教程
 
