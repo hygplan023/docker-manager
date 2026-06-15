@@ -7,12 +7,28 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const router = Router();
-const ROOT = join(import.meta.dirname, "../../../../");
+
+// 稳健地向上查找包含 pnpm-workspace.yaml 的项目根目录，
+// 避免因构建产物位置变化导致 ROOT 指向错误目录（曾误指向 /home/runner）
+function findWorkspaceRoot(start: string): string {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    const parent = join(dir, "..");
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // 兜底：从 artifacts/api-server/dist 回到工作区根（三级）
+  return join(start, "../../../");
+}
+
+const ROOT = findWorkspaceRoot(import.meta.dirname);
 const ZIP_PATH = join(ROOT, "dist-package.zip");
 
 const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", ".pnpm-store", ".local",
   "coverage", "__pycache__", ".turbo",
+  ".cache", ".agents", "attached_assets", "tmp", ".upm", ".config",
 ]);
 const SKIP_NAMES = new Set(["dist-package.zip"]);
 
