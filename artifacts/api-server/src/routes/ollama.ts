@@ -462,19 +462,223 @@ router.post("/ollama/test-connection", async (req, res) => {
   try {
     const { url } = req.body as { url: string };
     const startTime = Date.now();
-    const resp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+    let resp: Response;
+    try {
+      resp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(6000) });
+    } catch (fetchErr: unknown) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      let hint = "";
+      if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
+        hint = "；请确认 Ollama 容器已启动且端口 11434 已正确映射";
+      } else if (msg.includes("timeout") || msg.includes("AbortError")) {
+        hint = "；连接超时，服务可能正在启动中，稍后重试";
+      }
+      return res.json({ success: false, message: `端口不通: ${msg}${hint}`, latencyMs: null, models: [], hint });
+    }
     const latencyMs = Date.now() - startTime;
 
     if (!resp.ok) {
-      return res.json({ success: false, message: `连接失败: HTTP ${resp.status}`, latencyMs: null, models: [] });
+      return res.json({ success: false, message: `HTTP ${resp.status}，Ollama 服务异常`, latencyMs: null, models: [] });
     }
 
     const data = (await resp.json()) as { models?: Array<{ name: string }> };
     const models = (data.models || []).map((m) => m.name);
-    return res.json({ success: true, message: `连接成功，延迟 ${latencyMs}ms`, latencyMs, models });
+    const msg = models.length > 0
+      ? `连接成功，延迟 ${latencyMs}ms，${models.length} 个模型已就绪`
+      : `连接成功（延迟 ${latencyMs}ms），但尚未拉取任何模型`;
+    return res.json({ success: true, message: msg, latencyMs, models });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return res.json({ success: false, message: `连接失败: ${msg}`, latencyMs: null, models: [] });
+  }
+});
+
+// Get model path inside container
+router.get("/ollama/models/:name/path", async (req, res) => {
+  try {
+    const modelName = decodeURIComponent(req.params.name);
+    const container = await findOllamaContainer();
+    if (!container || container.State !== "running") {
+      return res.status(400).json({ success: false, message: "Ollama 容器未运行" });
+    }
+
+    // Parse model name to construct path
+    let registry = "registry.ollama.ai";
+    let namespace = "library";
+    let name = modelName;
+    let tag = "latest";
+
+    const colonIdx = modelName.lastIndexOf(":");
+    if (colonIdx > 0) {
+      tag = modelName.slice(colonIdx + 1);
+      name = modelName.slice(0, colonIdx);
+    }
+    const slashParts = name.split("/");
+    if (slashParts.length === 3) {
+      [registry, namespace, name] = slashParts;
+    } else if (slashParts.length === 2) {
+      [namespace, name] = slashParts;
+    }
+
+    const manifestPath = `/root/.ollama/models/manifests/${registry}/${namespace}/${name}/${tag}`;
+    const blobsDir = `/root/.ollama/models/blobs/`;
+    const baseDir = `/root/.ollama/`;
+
+    // Try to exec into container to verify path exists
+    let verified = false;
+    let fileSize = "";
+    try {
+      const c = docker.getContainer(container.Id);
+      const exec = await c.exec({
+        Cmd: ["ls", "-la", manifestPath],
+        AttachStdout: true,
+        AttachStderr: true,
+      });
+      const stream = await exec.start({ Detach: false });
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve) => {
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", resolve);
+      });
+      const output = Buffer.concat(chunks).toString("utf8");
+      verified = output.includes(tag) && !output.includes("No such file");
+      const sizeMatch = output.match(/\s+(\d+)\s+/);
+      if (sizeMatch) fileSize = `${sizeMatch[1]} 字节`;
+    } catch { /* exec not critical */ }
+
+    return res.json({
+      success: true,
+      modelName,
+      baseDir,
+      manifestPath,
+      blobsDir,
+      volumeMount: "ollama_data:/root/.ollama",
+      verified,
+      fileSize,
+      hint: "数据卷 ollama_data 挂载到宿主机，容器重启后模型数据保留",
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ success: false, message: msg });
+  }
+});
+
+// Service readiness — poll until Ollama API responds
+router.get("/ollama/readiness", async (req, res) => {
+  try {
+    const container = await findOllamaContainer();
+    if (!container || container.State !== "running") {
+      return res.json({ ready: false, message: "容器未运行", models: [] });
+    }
+    const portBinding = container.Ports.find((p) => p.PrivatePort === DEFAULT_PORT);
+    const port = portBinding?.PublicPort ?? DEFAULT_PORT;
+
+    const startTime = Date.now();
+    try {
+      const resp = await fetch(`http://localhost:${port}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      const latencyMs = Date.now() - startTime;
+      if (resp.ok) {
+        const data = (await resp.json()) as { models?: Array<{ name: string }> };
+        const models = (data.models || []).map((m: { name: string }) => m.name);
+        return res.json({ ready: true, message: `API 就绪，延迟 ${latencyMs}ms`, models, port });
+      }
+      return res.json({ ready: false, message: `API 返回 HTTP ${resp.status}，服务启动中...`, models: [], port });
+    } catch {
+      return res.json({ ready: false, message: "API 暂未就绪，Ollama 服务正在启动...", models: [], port });
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ ready: false, message: msg, models: [] });
+  }
+});
+
+// Pre-launch check for Codex / Claude Code
+router.post("/ollama/launch-check", async (req, res) => {
+  try {
+    const { model = "", tool = "codex" } = req.body as { model?: string; tool?: string };
+
+    const checks: Array<{ label: string; ok: boolean; message: string; hint?: string }> = [];
+
+    // 1. Ollama container running?
+    const container = await findOllamaContainer();
+    const containerRunning = !!container && container.State === "running";
+    checks.push({
+      label: "Ollama 容器",
+      ok: containerRunning,
+      message: containerRunning ? `容器运行中 (${container?.Names[0]?.replace(/^\//, "")})` : "容器未运行",
+      hint: containerRunning ? undefined : "请在 Ollama 管理页面点击「一键部署 Ollama」",
+    });
+
+    const portBinding = container?.Ports.find((p) => p.PrivatePort === DEFAULT_PORT);
+    const port = portBinding?.PublicPort ?? DEFAULT_PORT;
+
+    // 2. Port reachable?
+    let apiReachable = false;
+    let availableModels: string[] = [];
+    if (containerRunning) {
+      try {
+        const resp = await fetch(`http://localhost:${port}/api/tags`, { signal: AbortSignal.timeout(4000) });
+        if (resp.ok) {
+          apiReachable = true;
+          const data = (await resp.json()) as { models?: Array<{ name: string }> };
+          availableModels = (data.models || []).map((m) => m.name);
+        }
+      } catch { /* unreachable */ }
+    }
+    checks.push({
+      label: `端口 ${port} (Ollama API)`,
+      ok: apiReachable,
+      message: apiReachable ? `端口可达，OLLAMA_ORIGINS=* 已启用` : `端口 ${port} 不可达`,
+      hint: apiReachable ? undefined : "容器启动后通常需要 5-10 秒初始化，请稍后重试",
+    });
+
+    // 3. Model check
+    const targetModel = model || availableModels[0] || "";
+    const modelExists = targetModel ? availableModels.some((m) => m === targetModel || m.startsWith(targetModel.split(":")[0])) : availableModels.length > 0;
+    const resolvedModel = modelExists ? (availableModels.find((m) => m === targetModel || m.startsWith(targetModel.split(":")[0])) || availableModels[0]) : "";
+    checks.push({
+      label: "模型可用性",
+      ok: modelExists,
+      message: modelExists
+        ? `模型「${resolvedModel}」已就绪`
+        : targetModel
+          ? `模型「${targetModel}」未找到，已安装: ${availableModels.join(", ") || "无"}`
+          : "尚未拉取任何模型",
+      hint: modelExists ? undefined : "请在 Ollama 管理页面拉取需要的模型后再启动",
+    });
+
+    const baseUrl = `http://localhost:${port}`;
+    const openaiBaseUrl = `${baseUrl}/v1`;
+    const actualModel = resolvedModel || targetModel || "llama3";
+    const ready = containerRunning && apiReachable && modelExists;
+
+    // Generate commands by platform
+    const commands = {
+      codex: {
+        configYaml: `# ~/.codex/config.yaml\nmodel: "${actualModel}"\nprovider: ollama\nbaseURL: "${openaiBaseUrl}"\napiKey: "ollama"\napprovalMode: suggest`,
+        win: `$env:OPENAI_BASE_URL="${openaiBaseUrl}"\n$env:OPENAI_API_KEY="ollama"\nnpx @openai/codex`,
+        mac: `OPENAI_BASE_URL="${openaiBaseUrl}" OPENAI_API_KEY="ollama" npx @openai/codex`,
+        linux: `OPENAI_BASE_URL="${openaiBaseUrl}" OPENAI_API_KEY="ollama" npx @openai/codex`,
+      },
+      claude: {
+        win: `$env:ANTHROPIC_BASE_URL="${openaiBaseUrl}"\n$env:ANTHROPIC_API_KEY="ollama"\n$env:ANTHROPIC_MODEL="${actualModel}"\nclaude`,
+        mac: `export ANTHROPIC_BASE_URL="${openaiBaseUrl}"\nexport ANTHROPIC_API_KEY="ollama"\nexport ANTHROPIC_MODEL="${actualModel}"\nclaude`,
+        linux: `export ANTHROPIC_BASE_URL="${openaiBaseUrl}"\nexport ANTHROPIC_API_KEY="ollama"\nexport ANTHROPIC_MODEL="${actualModel}"\nclaude`,
+      },
+    };
+
+    return res.json({
+      ready,
+      checks,
+      availableModels,
+      resolvedModel: actualModel,
+      baseUrl,
+      openaiBaseUrl,
+      commands,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ ready: false, checks: [], message: msg });
   }
 });
 
