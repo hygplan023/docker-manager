@@ -75,6 +75,73 @@ router.delete("/containers/:id", async (req, res) => {
   }
 });
 
+router.post("/containers/create", async (req, res) => {
+  try {
+    const {
+      image,
+      name,
+      portBindings = [],
+      env = [],
+      binds = [],
+      restartPolicy = "no",
+      autoStart = true,
+    } = req.body as {
+      image: string;
+      name?: string;
+      portBindings?: { hostPort: string; containerPort: string; protocol?: string }[];
+      env?: string[];
+      binds?: string[];
+      restartPolicy?: string;
+      autoStart?: boolean;
+    };
+
+    if (!image) {
+      return res.status(400).json({ success: false, message: "镜像名称不能为空" });
+    }
+
+    const portBindingsConfig: Record<string, { HostPort: string }[]> = {};
+    const exposedPorts: Record<string, object> = {};
+    for (const pb of portBindings) {
+      if (!pb.containerPort) continue;
+      const proto = pb.protocol || "tcp";
+      const key = `${pb.containerPort}/${proto}`;
+      portBindingsConfig[key] = [{ HostPort: pb.hostPort || "" }];
+      exposedPorts[key] = {};
+    }
+
+    const createOpts: Parameters<typeof docker.createContainer>[0] = {
+      Image: image,
+      Env: env.filter((e) => e.trim()),
+      ExposedPorts: Object.keys(exposedPorts).length ? exposedPorts : undefined,
+      HostConfig: {
+        PortBindings: Object.keys(portBindingsConfig).length ? portBindingsConfig : undefined,
+        Binds: binds.filter((b) => b.trim()),
+        RestartPolicy: { Name: restartPolicy as "no" | "always" | "unless-stopped" | "on-failure" },
+      },
+    };
+    if (name && name.trim()) (createOpts as Record<string, unknown>).name = name.trim();
+
+    const container = await docker.createContainer(createOpts);
+    let started = false;
+    if (autoStart) {
+      try {
+        await container.start();
+        started = true;
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      message: started ? "容器已创建并启动" : "容器已创建（未启动）",
+      containerId: container.id,
+    });
+  } catch (err: unknown) {
+    req.log.error({ err }, "Failed to create container");
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ success: false, message: `创建失败: ${msg}` });
+  }
+});
+
 router.get("/containers/:id/logs", async (req, res) => {
   try {
     const container = docker.getContainer(req.params.id);
