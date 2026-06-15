@@ -2,6 +2,7 @@
 chcp 65001 >nul
 title Docker 管理中心 — 启动器
 color 0B
+cd /d "%~dp0"
 echo.
 echo  ============================================
 echo        Docker 管理中心  —  启动中...
