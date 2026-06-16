@@ -26,16 +26,36 @@
 
 ## 本地部署教程
 
-1. 下载仓库内离线安装包 `dist-package.zip`
-2. Windows：双击一键启动 `start-windows.bat`
-3. macOS / Linux：终端执行 `./start-mac.sh`
-4. 访问本地地址 http://localhost:11434 进入管理面板
+### 方式一：Docker 一键运行（推荐，最稳定）
+
+整套应用在 Docker 容器内完成依赖安装与构建，**无需在本机安装 Node.js / pnpm**，
+彻底避免 Windows 上的依赖安装问题。前提：已安装并启动 **Docker Desktop**。
+
+1. 下载并解压离线安装包 `dist-package.zip`
+2. Windows：双击 `start-docker.bat`
+   macOS / Linux：终端执行 `./start-docker.sh`
+   （或在解压目录直接运行 `docker compose up -d --build`）
+3. 首次运行会拉取基础镜像并构建，耗时几分钟，请耐心等待
+4. 浏览器访问 **http://localhost:18765** 进入管理面板
+5. 停止服务：双击 `stop-docker.bat`（或运行 `docker compose down`）
+
+> 容器通过挂载宿主机 Docker 套接字来管理 Docker Desktop 中的容器/镜像/数据卷，
+> 与 Portainer 的做法一致，安全且无需额外配置。
+
+### 方式二：本机 Node.js 运行（备用）
+
+需要本机已安装 **Node.js 20+** 与 **pnpm**，并启动 Docker Desktop。
+
+1. 下载并解压离线安装包 `dist-package.zip`
+2. Windows：双击 `start-windows.bat`；macOS / Linux：执行 `./start-mac.sh`
+3. 脚本会自动安装依赖并启动前后端
+4. 浏览器访问 **http://localhost:18765**
 
 ## 适配环境
 
 - Windows 10/11、macOS 12+
-- Docker Desktop 4.70 及以上
-- Node.js 20 LTS、pnpm 包管理器
+- Docker Desktop 4.70 及以上（方式一只需这一项）
+- 方式二额外需要：Node.js 20 LTS、pnpm 包管理器
 
 ## 版权信息
 
