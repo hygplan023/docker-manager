@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title Docker Manager - Launcher
+title Codex Manager - Launcher
 color 0B
 cd /d "%~dp0"
 echo.
 echo  ============================================
-echo         Docker Manager  -  Starting...
+echo         Codex Manager  -  Starting...
 echo  ============================================
 echo.
 
@@ -43,12 +43,12 @@ if errorlevel 1 (
 )
 
 echo  [2/3] Starting API server (port 8080)...
-start "Docker Manager - API" cmd /K "set PORT=8080&& set NODE_ENV=development&& pnpm --filter @workspace/api-server run dev"
+start "Codex Manager - API" cmd /K "set PORT=8080&& set NODE_ENV=development&& pnpm --filter @workspace/api-server run dev"
 
 timeout /T 12 /NOBREAK >nul
 
 echo  [3/3] Starting frontend (port 18765)...
-start "Docker Manager - UI" cmd /K "set PORT=18765&& set BASE_PATH=/&& set API_PROXY_TARGET=http://localhost:8080&& pnpm --filter @workspace/docker-manager run dev"
+start "Codex Manager - UI" cmd /K "set PORT=18765&& set BASE_PATH=/&& set API_PROXY_TARGET=http://localhost:8080&& pnpm --filter @workspace/docker-manager run dev"
 
 timeout /T 8 /NOBREAK >nul
 echo.
