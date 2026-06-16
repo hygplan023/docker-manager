@@ -159,7 +159,7 @@ router.get("/download/package", async (req, res) => {
     if (!existsSync(ZIP_PATH)) {
       return res.status(500).json({ error: "打包失败" });
     }
-    res.setHeader("Content-Disposition", "attachment; filename=docker-manager.zip");
+    res.setHeader("Content-Disposition", "attachment; filename=codex-manager.zip");
     res.setHeader("Content-Type", "application/zip");
     return res.sendFile(ZIP_PATH);
   } catch (err: unknown) {
