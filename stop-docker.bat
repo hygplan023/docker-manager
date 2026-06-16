@@ -1,5 +1,5 @@
 @echo off
-title Docker Manager - Stop
+title Codex Manager - Stop
 cd /d "%~dp0"
 echo [INFO] Stopping container...
 docker compose down
