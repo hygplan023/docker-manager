@@ -1,11 +1,11 @@
-# Docker 管理中心 —— 一键运行
+# Codex 管理中心 —— 一键运行
 # 用法：在本目录执行  docker compose up -d --build
 # 然后浏览器访问  http://localhost:18765
 services:
-  docker-manager:
+  codex-manager:
     build: .
-    image: docker-manager:local
-    container_name: docker-manager
+    image: codex-manager:local
+    container_name: codex-manager
     restart: unless-stopped
     ports:
       # 仅绑定到本机回环地址：避免把（挂载了 docker 套接字、无鉴权的）管理面板
