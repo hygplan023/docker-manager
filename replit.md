@@ -1,4 +1,4 @@
-# Docker 管理中心
+# Codex 管理中心
 
 一个基于 Node.js + Express + Dockerode 的容器管理平台，提供暗黑中文主题界面，支持 Ollama 一键部署、模型管理、客户端连接配置及基础容器/镜像/数据卷管理。
 
